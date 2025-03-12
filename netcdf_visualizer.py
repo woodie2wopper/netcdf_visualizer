@@ -481,15 +481,15 @@ def main():
     input_dir = os.path.dirname(os.path.abspath(args.file))
     base_name = os.path.splitext(os.path.basename(args.file))[0]
     
-    # 出力ディレクトリの作成（必要に応じて）
-    output_dir = os.path.join(input_dir, "ndvi_results")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"出力ディレクトリを作成しました: {output_dir}")
-    
     # 出力ファイル名が指定されていない場合は自動生成
     output_file = args.output
     if not output_file:
+        # 出力ディレクトリの作成（必要に応じて）
+        output_dir = os.path.join(input_dir, "ndvi_results")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"出力ディレクトリを作成しました: {output_dir}")
+        
         region_str = ""
         if args.lat and args.lon:
             region_str = f"_region_lat{args.lat:.4f}_lon{args.lon:.4f}_{args.region_size}km"
