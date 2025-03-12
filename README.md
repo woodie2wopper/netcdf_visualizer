@@ -8,6 +8,7 @@
 2. NetCDFファイルから植生指数（NDVI）を計算
 3. 計算した植生指数を地図上に可視化
 4. 特定の緯度経度を中心とした領域の抽出と分析
+5. NDVI統計情報のCSV出力と詳細分析
 
 ## 必要条件
 
@@ -18,7 +19,7 @@
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/yourusername/netcdf_visualizer.git
+git clone https://github.com/woodie2wopper/netcdf_visualizer.git
 cd netcdf_visualizer
 
 # 必要なライブラリをインストール
@@ -63,6 +64,16 @@ python netcdf_visualizer.py -h
 python netcdf_visualizer.py --file ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_c20170614215223.nc
 # または短いオプション名を使用
 python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_c20170614215223.nc -o custom_output.png -n
+
+# 特定の緯度経度を中心とした領域を抽出する場合（例: 東京）
+python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_c20170614215223.nc --lat 35.6895 --lon 139.6917 --region-size 20
+# または短いオプション名を使用
+python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_c20170614215223.nc -y 35.6895 -x 139.6917 -r 20
+
+# NDVI統計情報をCSVファイルに出力する場合
+python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_c20170614215223.nc -y 35.6895 -x 139.6917 -r 20 --ndvi-stats
+# または短いオプション名を使用
+python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_c20170614215223.nc -y 35.6895 -x 139.6917 -r 20 -s
 ```
 
 #### オプション
@@ -70,6 +81,25 @@ python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_199001
 - `--file`, `-f`: 処理するNetCDFファイルのパス
 - `--output`, `-o`: 出力画像ファイルのパス（指定しない場合はファイル名から自動生成）
 - `--no-display`, `-n`: プロットを表示しない（バッチ処理用）
+- `--lat`, `-y`: 抽出する領域の中心緯度（例: 35.6895 for 東京）
+- `--lon`, `-x`: 抽出する領域の中心経度（例: 139.6917 for 東京）
+- `--region-size`, `-r`: 抽出する領域のサイズ（km）（デフォルト: 20km）
+- `--ndvi-stats`, `-s`: NDVI統計情報をCSVファイルに出力する
+
+### 日本の主要都市の緯度経度
+
+以下は日本の主要都市の緯度経度の参考値です：
+
+| 都市 | 緯度 | 経度 |
+|------|------|------|
+| 東京 | 35.6895 | 139.6917 |
+| 大阪 | 34.6937 | 135.5022 |
+| 名古屋 | 35.1815 | 136.9066 |
+| 札幌 | 43.0618 | 141.3545 |
+| 福岡 | 33.5902 | 130.4017 |
+| 仙台 | 38.2682 | 140.8694 |
+| 広島 | 34.3853 | 132.4553 |
+| 那覇 | 26.2124 | 127.6809 |
 
 ## データについて
 
@@ -81,6 +111,94 @@ python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_199001
 - `SZEN`, `VZEN`, `RELAZ`: 太陽天頂角、視角天頂角、相対方位角
 - `TIMEOFDAY`: 観測時刻
 - `QA`: 品質管理フラグ
+
+## 抽出領域の分析
+
+特定の緯度経度を中心とした領域を抽出すると、以下の統計情報が表示されます：
+
+- 平均NDVI: 領域内の平均植生指数
+- 最大NDVI: 領域内の最大植生指数
+- 最小NDVI: 領域内の最小植生指数
+- 中央値NDVI: 領域内のNDVI中央値
+- 標準偏差: 植生指数のばらつき
+- 有効ピクセル数: 分析に使用されたピクセル数
+- 総ピクセル数: 領域内の全ピクセル数
+- 有効データ率: 有効なデータの割合（%）
+
+これらの情報を使用して、特定地域の植生状況を時系列で分析することができます。
+
+## NDVI統計情報のCSV出力
+
+`--ndvi-stats`または`-s`オプションを使用すると、NDVI統計情報がCSVファイルに出力されます。出力ファイル名は自動的に生成され、以下の形式になります：
+
+```
+[元ファイル名]_region_lat[緯度]_lon[経度]_[サイズ]km_ndvi_stats.csv
+```
+
+例：`AVHRR-Land_v005_AVH09C1_NOAA-11_19900101_region_lat35.6895_lon139.6917_20km_ndvi_stats.csv`
+
+CSVファイルには以下の情報が含まれます：
+
+| 統計量 | 値 |
+|--------|-----|
+| 対象地域 | 緯度35.6895°N, 経度139.6917°E 周辺 20km四方 |
+| 中心緯度 | 35.6895 |
+| 中心経度 | 139.6917 |
+| メッシュサイズ(km) | 20.0 |
+| 日付 | 1990年01月01日 |
+| 平均NDVI | 0.1234 |
+| 最大NDVI | 0.8765 |
+| 最小NDVI | -0.3456 |
+| 中央値NDVI | 0.2345 |
+| 標準偏差 | 0.1234 |
+| 有効ピクセル数 | 100 |
+| 総ピクセル数 | 120 |
+| 有効データ率(%) | 83.33 |
+
+## 出力ファイル名の形式
+
+出力ファイル名は以下の形式で自動生成されます：
+
+1. 画像ファイル：
+   ```
+   [元ファイル名]_region_lat[緯度]_lon[経度]_[サイズ]km_ndvi.png
+   ```
+
+2. 統計情報ファイル：
+   ```
+   [元ファイル名]_region_lat[緯度]_lon[経度]_[サイズ]km_ndvi_stats.csv
+   ```
+
+これにより、どの地域のどのサイズのデータかが一目でわかるようになっています。
+
+## バッチ処理の例
+
+複数の地点や時系列データを一括処理する例：
+
+```bash
+#!/bin/bash
+
+# 処理対象のファイル
+FILES="./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_1990*.nc"
+
+# 処理対象の都市（緯度、経度、名前）
+CITIES=(
+  "35.6895 139.6917 Tokyo"
+  "34.6937 135.5022 Osaka"
+  "43.0618 141.3545 Sapporo"
+)
+
+# 各ファイルと都市の組み合わせで処理
+for file in $FILES; do
+  for city in "${CITIES[@]}"; do
+    read -r lat lon name <<< "$city"
+    echo "処理中: $file - $name (緯度: $lat, 経度: $lon)"
+    python netcdf_visualizer.py -f "$file" -y "$lat" -x "$lon" -r 20 -s -n
+  done
+done
+
+echo "処理完了"
+```
 
 ## ライセンス
 

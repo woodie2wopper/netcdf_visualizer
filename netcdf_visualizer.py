@@ -7,6 +7,91 @@ import matplotlib.colors as colors
 import argparse
 import os
 from matplotlib.patches import Rectangle
+import csv
+import datetime
+import sys
+import matplotlib as mpl
+
+# 日本語フォント設定
+def setup_japanese_font():
+    """
+    matplotlibで日本語フォントを使用するための設定を行う関数
+    """
+    # macOSの場合
+    if sys.platform.startswith('darwin'):
+        font_dirs = ['/System/Library/Fonts', '/Library/Fonts', os.path.expanduser('~/Library/Fonts')]
+        font_files = []
+        
+        # 一般的な日本語フォント名のリスト
+        jp_font_names = [
+            'Hiragino Sans GB.ttc',
+            'Hiragino Sans.ttc',
+            'HiraginoSans-W3.ttc',
+            'HiraginoSans-W6.ttc',
+            'ヒラギノ角ゴシック W3.ttc',
+            'ヒラギノ角ゴシック W6.ttc',
+            'Hiragino Kaku Gothic Pro.ttc',
+            'Hiragino Kaku Gothic ProN.ttc',
+            'ヒラギノ角ゴ Pro.ttc',
+            'ヒラギノ角ゴ ProN.ttc',
+            'AppleGothic.ttf',
+            'YuGothic.ttc',
+            'YuGo-Medium.otf',
+            'YuGo-Bold.otf'
+        ]
+        
+        # フォントファイルを探す
+        for font_dir in font_dirs:
+            if os.path.exists(font_dir):
+                for font_name in jp_font_names:
+                    font_path = os.path.join(font_dir, font_name)
+                    if os.path.exists(font_path):
+                        font_files.append(font_path)
+                        break
+                if font_files:
+                    break
+        
+        # 見つかったフォントがあれば設定
+        if font_files:
+            print(f"日本語フォントを設定します: {os.path.basename(font_files[0])}")
+            mpl.rc('font', family='sans-serif')
+            mpl.rc('font', sans-serif=[os.path.splitext(os.path.basename(font_files[0]))[0]])
+        else:
+            print("警告: 日本語フォントが見つかりませんでした。テキストが正しく表示されない可能性があります。")
+    
+    # Linuxの場合
+    elif sys.platform.startswith('linux'):
+        try:
+            # IPAフォントがインストールされているか確認
+            mpl.rc('font', family='IPAPGothic')
+            print("日本語フォントを設定しました: IPAPGothic")
+        except Exception:
+            try:
+                # Notoフォントを試す
+                mpl.rc('font', family='Noto Sans CJK JP')
+                print("日本語フォントを設定しました: Noto Sans CJK JP")
+            except Exception:
+                print("警告: 日本語フォントが見つかりませんでした。テキストが正しく表示されない可能性があります。")
+    
+    # Windowsの場合
+    elif sys.platform.startswith('win'):
+        try:
+            mpl.rc('font', family='MS Gothic')
+            print("日本語フォントを設定しました: MS Gothic")
+        except Exception:
+            print("警告: 日本語フォントが見つかりませんでした。テキストが正しく表示されない可能性があります。")
+    
+    # フォントキャッシュをクリア
+    try:
+        mpl.font_manager._rebuild()
+    except Exception:
+        # 新しいバージョンのmatplotlibでは_rebuild()が非推奨または引数が必要な場合がある
+        try:
+            import matplotlib.font_manager as fm
+            fm.fontManager.findfont('DejaVu Sans')  # キャッシュを再構築するためのダミー呼び出し
+            print("フォントキャッシュを更新しました")
+        except Exception:
+            print("警告: フォントキャッシュの更新に失敗しました")
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
@@ -71,7 +156,25 @@ def get_region_indices(lats, lons, center_lat, center_lon, region_size_km):
     
     return lat_indices, lon_indices
 
-def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=None, center_lon=None, region_size_km=20):
+def save_ndvi_stats(stats, output_file):
+    """
+    NDVI統計情報をCSVファイルに保存する関数
+    
+    Args:
+        stats: 統計情報の辞書
+        output_file: 出力ファイルパス
+    """
+    with open(output_file, 'w', newline='') as csvfile:
+        fieldnames = ['統計量', '値']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        writer.writeheader()
+        for key, value in stats.items():
+            writer.writerow({'統計量': key, '値': value})
+    
+    print(f"NDVI統計情報をCSVファイルに保存しました: {output_file}")
+
+def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=None, center_lon=None, region_size_km=20, ndvi_stats=False):
     """
     NetCDFファイルから植生指数（NDVI）を計算して可視化する関数
     
@@ -82,7 +185,14 @@ def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=No
         center_lat (float, optional): 抽出する領域の中心緯度
         center_lon (float, optional): 抽出する領域の中心経度
         region_size_km (float): 抽出する領域のサイズ（km）
+        ndvi_stats (bool): NDVI統計情報を出力するかどうか
+    
+    Returns:
+        dict: NDVI統計情報（ndvi_stats=Trueの場合）
     """
+    # 日本語フォントの設定
+    setup_japanese_font()
+    
     # NetCDFファイルの読み込み
     print(f"ファイルを読み込み中: {nc_file_path}")
     nc_data = Dataset(nc_file_path, 'r')
@@ -141,6 +251,27 @@ def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=No
     # 図の作成
     plt.figure(figsize=(12, 8))
 
+    # ファイル名から日付を抽出（ファイル名のフォーマットに依存）
+    filename = os.path.basename(nc_file_path)
+    date_str = "不明"
+    date_obj = None
+    if "_" in filename:
+        parts = filename.split("_")
+        for part in parts:
+            if len(part) == 8 and part.isdigit():
+                year = part[:4]
+                month = part[4:6]
+                day = part[6:8]
+                date_str = f"{year}年{month}月{day}日"
+                try:
+                    date_obj = datetime.datetime(int(year), int(month), int(day))
+                except ValueError:
+                    pass
+                break
+
+    # 統計情報を格納する辞書
+    stats = {}
+    
     # 特定の領域を抽出する場合
     if center_lat is not None and center_lon is not None:
         # 指定された中心点から特定の距離内の領域を抽出
@@ -166,6 +297,25 @@ def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=No
             plt.gca().add_patch(rect)
             
             plt.legend()
+            
+            # 統計情報を全体から計算
+            valid_ndvi = ndvi[~np.ma.getmaskarray(ndvi)]
+            if len(valid_ndvi) > 0:
+                stats = {
+                    "対象地域": f"全体（指定領域が見つからないため）",
+                    "中心緯度": center_lat,
+                    "中心経度": center_lon,
+                    "メッシュサイズ(km)": region_size_km,
+                    "日付": date_str,
+                    "平均NDVI": float(np.mean(valid_ndvi)),
+                    "最大NDVI": float(np.max(valid_ndvi)),
+                    "最小NDVI": float(np.min(valid_ndvi)),
+                    "中央値NDVI": float(np.median(valid_ndvi)),
+                    "標準偏差": float(np.std(valid_ndvi)),
+                    "有効ピクセル数": int(len(valid_ndvi)),
+                    "総ピクセル数": int(ndvi.size),
+                    "有効データ率(%)": float(len(valid_ndvi) / ndvi.size * 100)
+                }
         else:
             # 抽出された領域のプロット
             plt.subplot(1, 2, 1)
@@ -208,32 +358,53 @@ def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=No
                 print(f"- 平均NDVI: {np.mean(valid_ndvi):.4f}")
                 print(f"- 最大NDVI: {np.max(valid_ndvi):.4f}")
                 print(f"- 最小NDVI: {np.min(valid_ndvi):.4f}")
+                print(f"- 中央値NDVI: {np.median(valid_ndvi):.4f}")
                 print(f"- 標準偏差: {np.std(valid_ndvi):.4f}")
                 print(f"- 有効ピクセル数: {len(valid_ndvi)}")
+                print(f"- 総ピクセル数: {region_ndvi.size}")
+                print(f"- 有効データ率: {len(valid_ndvi) / region_ndvi.size * 100:.2f}%")
+                
+                # 統計情報を辞書に格納
+                stats = {
+                    "対象地域": f"緯度{center_lat:.4f}°N, 経度{center_lon:.4f}°E 周辺 {region_size_km}km四方",
+                    "中心緯度": center_lat,
+                    "中心経度": center_lon,
+                    "メッシュサイズ(km)": region_size_km,
+                    "日付": date_str,
+                    "平均NDVI": float(np.mean(valid_ndvi)),
+                    "最大NDVI": float(np.max(valid_ndvi)),
+                    "最小NDVI": float(np.min(valid_ndvi)),
+                    "中央値NDVI": float(np.median(valid_ndvi)),
+                    "標準偏差": float(np.std(valid_ndvi)),
+                    "有効ピクセル数": int(len(valid_ndvi)),
+                    "総ピクセル数": int(region_ndvi.size),
+                    "有効データ率(%)": float(len(valid_ndvi) / region_ndvi.size * 100)
+                }
     else:
         # 全体マップのプロット
         plt.subplot(1, 1, 1)
         im = plt.pcolormesh(lons, lats, ndvi, cmap=cmap, norm=norm)
         plt.colorbar(im, label='NDVI')
-    
-    # ファイル名から日付を抽出（ファイル名のフォーマットに依存）
-    filename = os.path.basename(nc_file_path)
-    date_str = "不明"
-    if "_" in filename:
-        parts = filename.split("_")
-        for part in parts:
-            if len(part) == 8 and part.isdigit():
-                year = part[:4]
-                month = part[4:6]
-                day = part[6:8]
-                date_str = f"{year}年{month}月{day}日"
-                break
-    
-    if center_lat is None or center_lon is None:
         plt.title(f'正規化植生指数 (NDVI) - {date_str}')
         plt.xlabel('経度')
         plt.ylabel('緯度')
         plt.grid(True, linestyle='--', alpha=0.5)
+        
+        # 全体の統計情報
+        valid_ndvi = ndvi[~np.ma.getmaskarray(ndvi)]
+        if len(valid_ndvi) > 0:
+            stats = {
+                "対象地域": "全体",
+                "日付": date_str,
+                "平均NDVI": float(np.mean(valid_ndvi)),
+                "最大NDVI": float(np.max(valid_ndvi)),
+                "最小NDVI": float(np.min(valid_ndvi)),
+                "中央値NDVI": float(np.median(valid_ndvi)),
+                "標準偏差": float(np.std(valid_ndvi)),
+                "有効ピクセル数": int(len(valid_ndvi)),
+                "総ピクセル数": int(ndvi.size),
+                "有効データ率(%)": float(len(valid_ndvi) / ndvi.size * 100)
+            }
 
     # 図の保存と表示
     plt.tight_layout()
@@ -249,6 +420,9 @@ def visualize_ndvi(nc_file_path, output_file=None, show_plot=True, center_lat=No
     nc_data.close()
     
     print("処理が完了しました。")
+    
+    # NDVI統計情報を返す
+    return stats
 
 def main():
     # コマンドライン引数の設定
@@ -266,18 +440,67 @@ def main():
                         help='抽出する領域の中心経度（例: 139.6917 for 東京）')
     parser.add_argument('--region-size', '-r', type=float, default=20.0,
                         help='抽出する領域のサイズ（km）（デフォルト: 20km）')
+    parser.add_argument('--ndvi-stats', '-s', action='store_true',
+                        help='NDVI統計情報をCSVファイルに出力する')
+    
+    # 引数がない場合は簡易ヘルプを表示
+    if len(sys.argv) == 1:
+        print("NetCDF 可視化ツール - 簡易ヘルプ")
+        print("\n基本的な使い方:")
+        print("  python netcdf_visualizer.py -f <NetCDFファイル> [オプション]")
+        print("\n主なオプション:")
+        print("  -f, --file <ファイル>      処理するNetCDFファイルのパス")
+        print("  -o, --output <ファイル>    出力画像ファイルのパス")
+        print("  -n, --no-display          プロットを表示しない")
+        print("  -y, --lat <緯度>          抽出する領域の中心緯度（例: 35.6895 for 東京）")
+        print("  -x, --lon <経度>          抽出する領域の中心経度（例: 139.6917 for 東京）")
+        print("  -r, --region-size <サイズ> 抽出する領域のサイズ（km）（デフォルト: 20km）")
+        print("  -s, --ndvi-stats          NDVI統計情報をCSVファイルに出力する")
+        print("\n詳細なヘルプを表示するには:")
+        print("  python netcdf_visualizer.py -h")
+        print("\n日本の主要都市の緯度経度:")
+        print("  東京: 35.6895, 139.6917")
+        print("  大阪: 34.6937, 135.5022")
+        print("  札幌: 43.0618, 141.3545")
+        print("  福岡: 33.5902, 130.4017")
+        return
     
     args = parser.parse_args()
+    
+    # ファイルの存在確認
+    if not os.path.exists(args.file):
+        print(f"エラー: 指定されたファイル '{args.file}' が見つかりません。")
+        print("正しいファイルパスを指定するか、ファイルをダウンロードしてください。")
+        print("\nファイルのダウンロード方法:")
+        print("  python download_nc_files.py --help")
+        return
+    
+    # 入力ファイルのディレクトリとファイル名を取得
+    input_dir = os.path.dirname(os.path.abspath(args.file))
+    base_name = os.path.splitext(os.path.basename(args.file))[0]
+    
+    # 出力ディレクトリの作成（必要に応じて）
+    output_dir = os.path.join(input_dir, "ndvi_results")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"出力ディレクトリを作成しました: {output_dir}")
     
     # 出力ファイル名が指定されていない場合は自動生成
     output_file = args.output
     if not output_file:
-        base_name = os.path.splitext(os.path.basename(args.file))[0]
-        region_str = f"_region_{args.lat}_{args.lon}_{args.region_size}km" if args.lat and args.lon else ""
-        output_file = f"{base_name}{region_str}_ndvi.png"
+        region_str = ""
+        if args.lat and args.lon:
+            region_str = f"_region_lat{args.lat:.4f}_lon{args.lon:.4f}_{args.region_size}km"
+        output_file = os.path.join(output_dir, f"{base_name}{region_str}_ndvi.png")
     
     # 可視化の実行
-    visualize_ndvi(args.file, output_file, not args.no_display, args.lat, args.lon, args.region_size)
+    stats = visualize_ndvi(args.file, output_file, not args.no_display, args.lat, args.lon, args.region_size, args.ndvi_stats)
+    
+    # NDVI統計情報をCSVファイルに出力
+    if args.ndvi_stats and stats:
+        # 出力ファイル名の生成
+        stats_file = os.path.splitext(output_file)[0] + "_stats.csv"
+        save_ndvi_stats(stats, stats_file)
 
 if __name__ == "__main__":
     main()
