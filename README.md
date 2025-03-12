@@ -9,6 +9,7 @@
 3. 計算した植生指数を地図上に可視化
 4. 特定の緯度経度を中心とした領域の抽出と分析
 5. NDVI統計情報のCSV出力と詳細分析
+6. 複数地点の時系列NDVI値の一括処理
 
 ## 必要条件
 
@@ -85,6 +86,61 @@ python netcdf_visualizer.py -f ./nc_files/AVHRR-Land_v005_AVH09C1_NOAA-11_199001
 - `--lon`, `-x`: 抽出する領域の中心経度（例: 139.6917 for 東京）
 - `--region-size`, `-r`: 抽出する領域のサイズ（km）（デフォルト: 20km）
 - `--ndvi-stats`, `-s`: NDVI統計情報をCSVファイルに出力する
+
+### 複数地点の一括処理
+
+複数の地点のNDVIを日付ごとに一括で取得するには、`ndvi_batch_processor.py`スクリプトを使用します。このスクリプトは、緯度経度のリスト（CSVファイル）と.ncファイルが格納されているディレクトリを入力として、すべての組み合わせに対してnetcdf_visualizer.pyを実行します。
+
+```bash
+# 基本的な使い方
+python ndvi_batch_processor.py -p master.csv -d /path/to/nc_files -o ndvi_output -s
+
+# ヘルプを表示
+python ndvi_batch_processor.py -h
+
+# テストモードで実行（最初の2つの.ncファイルのみ処理）
+python ndvi_batch_processor.py -p master.csv -d /path/to/nc_files -o ndvi_output -s -t
+
+# 並列処理を使用する場合（4つのワーカーを使用）
+python ndvi_batch_processor.py -p master.csv -d /path/to/nc_files -o ndvi_output -s -w 4
+
+# テストモードと並列処理を組み合わせる場合
+python ndvi_batch_processor.py -p master.csv -d /path/to/nc_files -o ndvi_output -s -t -w 2
+```
+
+#### オプション
+
+- `--points`, `-p`: 緯度経度リストのCSVファイル（No,Lat,Lon形式）
+- `--nc-dir`, `-d`: .ncファイルが格納されているディレクトリ
+- `--output`, `-o`: 結果を保存するディレクトリ（デフォルト: ndvi_results）
+- `--region-size`, `-r`: 抽出する領域のサイズ（km）（デフォルト: 20km）
+- `--workers`, `-w`: 並列処理のワーカー数（デフォルト: 1）
+- `--summary`, `-s`: 処理後に結果をまとめたCSVファイルを作成する
+- `--test`, `-t`: テストモード（最初の2つの.ncファイルのみ処理）
+
+#### 入力CSVファイル形式
+
+緯度経度リストのCSVファイルは以下の形式である必要があります：
+
+```csv
+No,Lat,Lon,Description
+1,35.6895,139.6917,東京
+2,34.6937,135.5022,大阪
+3,43.0618,141.3545,札幌
+...
+```
+
+必須列は `No`, `Lat`, `Lon` の3つです。`Description` 列はオプションで、処理には使用されません。
+
+#### 出力結果
+
+このスクリプトを実行すると、以下のような出力が生成されます：
+
+1. 各地点ごとのディレクトリ（例：`ndvi_output/point_1/`、`ndvi_output/point_2/`など）
+2. 各地点ディレクトリ内に、日付ごとのNDVI統計情報ファイル（例：`19900101_ndvi_stats.csv`）
+3. `-s`オプションを指定した場合、以下のサマリーファイルも生成されます：
+   - `ndvi_summary.csv`：地点ごとの時系列NDVI値をまとめたファイル
+   - `ndvi_by_date.csv`：日付ごとのNDVI値をまとめたファイル
 
 ### 日本の主要都市の緯度経度
 
@@ -198,6 +254,21 @@ for file in $FILES; do
 done
 
 echo "処理完了"
+```
+
+より効率的な方法として、`ndvi_batch_processor.py`を使用することもできます：
+
+```bash
+# CSVファイルを作成
+cat > cities.csv << EOF
+No,Lat,Lon,Description
+1,35.6895,139.6917,東京
+2,34.6937,135.5022,大阪
+3,43.0618,141.3545,札幌
+EOF
+
+# バッチ処理を実行
+python ndvi_batch_processor.py -p cities.csv -d ./nc_files -o ndvi_results -s -w 3
 ```
 
 ## ライセンス

@@ -55,7 +55,9 @@ def setup_japanese_font():
         if font_files:
             print(f"日本語フォントを設定します: {os.path.basename(font_files[0])}")
             mpl.rc('font', family='sans-serif')
-            mpl.rc('font', sans-serif=[os.path.splitext(os.path.basename(font_files[0]))[0]])
+            # 'sans-serif'をキーワード引数として渡す代わりに辞書を使用
+            font_dict = {'font.sans-serif': [os.path.splitext(os.path.basename(font_files[0]))[0]]}
+            plt.rcParams.update(font_dict)
         else:
             print("警告: 日本語フォントが見つかりませんでした。テキストが正しく表示されない可能性があります。")
     
@@ -63,12 +65,12 @@ def setup_japanese_font():
     elif sys.platform.startswith('linux'):
         try:
             # IPAフォントがインストールされているか確認
-            mpl.rc('font', family='IPAPGothic')
+            plt.rcParams['font.family'] = 'IPAPGothic'
             print("日本語フォントを設定しました: IPAPGothic")
         except Exception:
             try:
                 # Notoフォントを試す
-                mpl.rc('font', family='Noto Sans CJK JP')
+                plt.rcParams['font.family'] = 'Noto Sans CJK JP'
                 print("日本語フォントを設定しました: Noto Sans CJK JP")
             except Exception:
                 print("警告: 日本語フォントが見つかりませんでした。テキストが正しく表示されない可能性があります。")
@@ -76,18 +78,18 @@ def setup_japanese_font():
     # Windowsの場合
     elif sys.platform.startswith('win'):
         try:
-            mpl.rc('font', family='MS Gothic')
+            plt.rcParams['font.family'] = 'MS Gothic'
             print("日本語フォントを設定しました: MS Gothic")
         except Exception:
             print("警告: 日本語フォントが見つかりませんでした。テキストが正しく表示されない可能性があります。")
     
     # フォントキャッシュをクリア
     try:
-        mpl.font_manager._rebuild()
+        import matplotlib.font_manager as fm
+        fm._rebuild()
     except Exception:
         # 新しいバージョンのmatplotlibでは_rebuild()が非推奨または引数が必要な場合がある
         try:
-            import matplotlib.font_manager as fm
             fm.fontManager.findfont('DejaVu Sans')  # キャッシュを再構築するためのダミー呼び出し
             print("フォントキャッシュを更新しました")
         except Exception:
