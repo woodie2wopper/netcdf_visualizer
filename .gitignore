@@ -1,0 +1,40 @@
+# Python関連
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 仮想環境
+venv/
+ENV/
+
+# データファイル
+*.nc
+nc_files/
+example/*.nc
+
+# 出力ファイル
+*.png
+*.jpg
+*.jpeg
+
+# その他
+.DS_Store
+.idea/
+.vscode/
