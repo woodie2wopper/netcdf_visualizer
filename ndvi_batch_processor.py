@@ -17,8 +17,8 @@ def parse_arguments():
                         help='緯度経度リストのCSVファイル（No,Lat,Lon形式）')
     parser.add_argument('--nc-dir', '-d', type=str, required=True,
                         help='.ncファイルが格納されているディレクトリ')
-    parser.add_argument('--output', '-o', type=str, default='ndvi_results',
-                        help='結果を保存するディレクトリ（デフォルト: ndvi_results）')
+    parser.add_argument('--output', '-o', type=str, default=None,
+                        help='結果を保存するディレクトリ（指定しない場合は入力ディレクトリ内のndvi_resultsフォルダ）')
     parser.add_argument('--region-size', '-r', type=float, default=20.0,
                         help='抽出する領域のサイズ（km）（デフォルト: 20km）')
     parser.add_argument('--workers', '-w', type=int, default=1,
@@ -264,8 +264,13 @@ def main():
         print("エラー: 地点情報または.ncファイルが見つかりませんでした。")
         return
     
-    # 出力ディレクトリの作成
-    output_dir = os.path.abspath(args.output)
+    # 出力ディレクトリの設定
+    if args.output is None:
+        # 出力先が指定されていない場合は入力ディレクトリ内のndvi_resultsフォルダを使用
+        output_dir = os.path.join(os.path.abspath(args.nc_dir), "ndvi_results")
+    else:
+        output_dir = os.path.abspath(args.output)
+    
     os.makedirs(output_dir, exist_ok=True)
     print(f"出力ディレクトリ: {output_dir}")
     
