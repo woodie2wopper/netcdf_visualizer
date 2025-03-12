@@ -494,6 +494,14 @@ def main():
         if args.lat and args.lon:
             region_str = f"_region_lat{args.lat:.4f}_lon{args.lon:.4f}_{args.region_size}km"
         output_file = os.path.join(output_dir, f"{base_name}{region_str}_ndvi.png")
+    else:
+        # 出力ファイルが指定されている場合、そのディレクトリを確認して作成
+        output_dir = os.path.dirname(os.path.abspath(output_file))
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"出力ディレクトリを作成しました: {output_dir}")
+    
+    print(f"出力ファイル: {output_file}")
     
     # 可視化の実行
     stats = visualize_ndvi(args.file, output_file, not args.no_display, args.lat, args.lon, args.region_size, args.ndvi_stats)

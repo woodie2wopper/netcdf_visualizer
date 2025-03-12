@@ -26,7 +26,7 @@ def parse_arguments():
     parser.add_argument('--summary', '-s', action='store_true',
                         help='処理後に結果をまとめたCSVファイルを作成する')
     parser.add_argument('--test', '-t', action='store_true',
-                        help='テストモード（最初の2つの.ncファイルのみ処理）')
+                        help='テストモード（最初の1つの.ncファイルのみ処理）')
     
     return parser.parse_args()
 
@@ -53,7 +53,18 @@ def find_nc_files(nc_dir):
     """ディレクトリ内の.ncファイルを検索する関数"""
     nc_files = []
     for ext in ['*.nc', '*.NC']:
-        nc_files.extend(glob.glob(os.path.join(nc_dir, ext)))
+        # 絶対パスを使用してファイルを検索
+        pattern = os.path.join(os.path.abspath(nc_dir), ext)
+        found_files = glob.glob(pattern)
+        if not found_files:
+            print(f"警告: パターン '{pattern}' に一致するファイルが見つかりませんでした")
+        nc_files.extend(found_files)
+    
+    if not nc_files:
+        print(f"警告: ディレクトリ '{nc_dir}' に.ncファイルが見つかりませんでした")
+        return []
+    
+    print(f"見つかった.ncファイル: {len(nc_files)}個")
     
     # 日付情報を抽出してソート
     nc_files_with_date = []
@@ -63,6 +74,8 @@ def find_nc_files(nc_dir):
         if "_" in filename:
             parts = filename.split("_")
             for part in parts:
+                # 空白を削除して処理
+                part = part.strip()
                 if len(part) == 8 and part.isdigit():
                     try:
                         date = datetime.strptime(part, '%Y%m%d')
@@ -73,6 +86,12 @@ def find_nc_files(nc_dir):
         
         if date_str:
             nc_files_with_date.append((nc_file, date_str))
+        else:
+            print(f"警告: ファイル '{filename}' から日付情報を抽出できませんでした")
+    
+    if not nc_files_with_date:
+        print("警告: 日付情報を持つ.ncファイルが見つかりませんでした")
+        return nc_files  # 日付情報がなくても、見つかったファイルを返す
     
     # 日付でソート
     nc_files_with_date.sort(key=lambda x: x[1])
@@ -90,42 +109,62 @@ def process_point_file(point, nc_file, region_size, output_dir):
     if "_" in filename:
         parts = filename.split("_")
         for part in parts:
+            # 空白を削除して処理
+            part = part.strip()
             if len(part) == 8 and part.isdigit():
                 date_str = part
                 break
     
     print(f"処理中: 地点 {point_no} (緯度: {lat}, 経度: {lon}), ファイル: {os.path.basename(nc_file)}")
     
+    # 地点ごとのディレクトリを作成
+    point_dir = os.path.join(output_dir, f"point_{point_no}")
+    os.makedirs(point_dir, exist_ok=True)
+    
+    # 出力ファイル名を生成
+    base_name = os.path.splitext(os.path.basename(nc_file))[0]
+    region_str = f"_region_lat{lat:.4f}_lon{lon:.4f}_{region_size}km"
+    output_image = os.path.join(point_dir, f"{date_str}{region_str}_ndvi.png")
+    output_stats = os.path.join(point_dir, f"{date_str}_ndvi_stats.csv")
+    
+    # netcdf_visualizer.pyの絶対パスを取得
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    visualizer_path = os.path.join(script_dir, 'netcdf_visualizer.py')
+    
+    print(f"  出力画像: {output_image}")
+    print(f"  統計ファイル: {output_stats}")
+    
     # netcdf_visualizer.pyを実行するコマンド
     cmd = [
         sys.executable,  # 現在のPythonインタプリタ
-        'netcdf_visualizer.py',
+        visualizer_path,  # netcdf_visualizer.pyの絶対パス
         '-f', nc_file,
         '-y', str(lat),
         '-x', str(lon),
         '-r', str(region_size),
+        '-o', output_image,  # 出力画像ファイルを明示的に指定
         '-s',  # NDVI統計情報をCSVファイルに出力
         '-n'   # プロットを表示しない
     ]
     
     try:
         # サブプロセスとして実行
+        print(f"  実行コマンド: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print(f"  コマンド実行結果: {result.returncode}")
         
-        # 出力ファイルのパスを特定
-        base_name = os.path.splitext(os.path.basename(nc_file))[0]
-        region_str = f"_region_lat{lat:.4f}_lon{lon:.4f}_{region_size}km"
-        stats_file = os.path.join(os.path.dirname(nc_file), "ndvi_results", f"{base_name}{region_str}_ndvi_stats.csv")
+        # 標準出力と標準エラー出力を表示
+        if result.stdout:
+            print(f"  標準出力:\n{result.stdout}")
+        if result.stderr:
+            print(f"  標準エラー出力:\n{result.stderr}")
         
-        # 結果ディレクトリにコピー
-        point_dir = os.path.join(output_dir, f"point_{point_no}")
-        os.makedirs(point_dir, exist_ok=True)
+        # 統計情報ファイルのパス（netcdf_visualizer.pyによって生成される）
+        stats_file = os.path.splitext(output_image)[0] + "_stats.csv"
         
-        # 結果ファイルの新しいパス
-        new_stats_file = os.path.join(point_dir, f"{date_str}_ndvi_stats.csv")
-        
-        # 統計情報ファイルが存在する場合、コピーする代わりに読み込んで新しいファイルに保存
-        if os.path.exists(stats_file):
+        # 統計情報ファイルが存在する場合、必要に応じて名前を変更
+        if os.path.exists(stats_file) and stats_file != output_stats:
+            # 統計情報ファイルを読み込む
             stats_data = {}
             with open(stats_file, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
@@ -136,20 +175,27 @@ def process_point_file(point, nc_file, region_size, output_dir):
             stats_data['地点No'] = point_no
             
             # 新しいファイルに保存
-            with open(new_stats_file, 'w', encoding='utf-8', newline='') as f:
+            with open(output_stats, 'w', encoding='utf-8', newline='') as f:
                 fieldnames = ['統計量', '値']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for key, value in stats_data.items():
                     writer.writerow({'統計量': key, '値': value})
             
-            print(f"  結果を保存しました: {new_stats_file}")
+            # 元の統計情報ファイルを削除（オプション）
+            if stats_file != output_stats:
+                try:
+                    os.remove(stats_file)
+                except:
+                    pass
+            
+            print(f"  結果を保存しました: {output_stats}")
             return {
                 'point_no': point_no,
                 'lat': lat,
                 'lon': lon,
                 'date': date_str,
-                'stats_file': new_stats_file,
+                'stats_file': output_stats,
                 'success': True
             }
         else:
@@ -254,11 +300,16 @@ def main():
     nc_files = find_nc_files(args.nc_dir)
     print(f"  {len(nc_files)}個の.ncファイルを見つけました")
     
-    # テストモードの場合は最初の2つのファイルのみ使用
+    # テストモードの場合は最初の1つのファイルのみ使用
     if args.test:
-        if len(nc_files) > 2:
-            nc_files = nc_files[:2]
-            print(f"  テストモード: 最初の2つのファイルのみ使用します")
+        if len(nc_files) > 0:
+            nc_files = nc_files[:1]
+            print(f"  テストモード: 最初の1つのファイルのみ使用します: {os.path.basename(nc_files[0])}")
+        
+        # テストモードでは最初の1つの地点のみ使用
+        if len(points) > 0:
+            points = points[:1]
+            print(f"  テストモード: 最初の1つの地点のみ使用します: 地点 {points[0]['No']} (緯度: {points[0]['Lat']}, 経度: {points[0]['Lon']})")
     
     if not points or not nc_files:
         print("エラー: 地点情報または.ncファイルが見つかりませんでした。")
@@ -266,11 +317,22 @@ def main():
     
     # 出力ディレクトリの設定
     if args.output is None:
-        # 出力先が指定されていない場合は入力ディレクトリ内のndvi_resultsフォルダを使用
-        output_dir = os.path.join(os.path.abspath(args.nc_dir), "ndvi_results")
+        # 出力先が指定されていない場合は.ncファイルのディレクトリにndvi_resultsフォルダを作成
+        nc_dir = os.path.abspath(args.nc_dir)
+        output_dir = os.path.join(nc_dir, "ndvi_results")
+        print(f"出力先が指定されていないため、.ncファイルのディレクトリに出力します: {output_dir}")
     else:
-        output_dir = os.path.abspath(args.output)
+        # 絶対パスに変換
+        if os.path.isabs(args.output):
+            # 絶対パスの場合はそのまま使用
+            output_dir = args.output
+        else:
+            # 相対パスの場合は.ncファイルのディレクトリからの相対パスとして扱う
+            nc_dir = os.path.abspath(args.nc_dir)
+            output_dir = os.path.join(nc_dir, args.output)
+        print(f"指定された出力先を使用します: {output_dir}")
     
+    # 出力ディレクトリを作成
     os.makedirs(output_dir, exist_ok=True)
     print(f"出力ディレクトリ: {output_dir}")
     
@@ -279,26 +341,43 @@ def main():
     results = []
     
     # 並列処理
-    with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
-        futures = []
+    if args.workers > 1:
+        print(f"並列処理モード: {args.workers}ワーカー")
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
+            futures = []
+            for point in points:
+                for nc_file in nc_files:
+                    future = executor.submit(
+                        process_point_file, 
+                        point, 
+                        nc_file, 
+                        args.region_size, 
+                        output_dir
+                    )
+                    futures.append(future)
+            
+            # 結果の収集
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    print(f"エラー: 処理中に例外が発生しました: {e}")
+    else:
+        print("逐次処理モード")
+        # 逐次処理
         for point in points:
             for nc_file in nc_files:
-                future = executor.submit(
-                    process_point_file, 
-                    point, 
-                    nc_file, 
-                    args.region_size, 
-                    output_dir
-                )
-                futures.append(future)
-        
-        # 結果の収集
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                result = future.result()
-                results.append(result)
-            except Exception as e:
-                print(f"エラー: 処理中に例外が発生しました: {e}")
+                try:
+                    result = process_point_file(
+                        point, 
+                        nc_file, 
+                        args.region_size, 
+                        output_dir
+                    )
+                    results.append(result)
+                except Exception as e:
+                    print(f"エラー: 処理中に例外が発生しました: {e}")
     
     print(f"処理が完了しました。合計: {len(results)}件")
     
